@@ -1,0 +1,190 @@
+---
+title: "SME0806 - Estatística Computacional - Trabalho 2"
+author: "Matheus Victal Cerqueira"
+date: "17/06/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Alunos:
+
+- Aline Fernanda da Conceição, 9437275
+- Diego J Talarico Ferreira, 3166561
+- Matheus Victal Cerqueira, 10276661
+- Murilo Henrique Soave, 10688813
+- Nelson Calsolari Neto, 10277022
+
+
+## Docente: Professor Dr. Mário de Castro
+
+## Introdução
+
+O presente documento se trata de uma solução para os exercícios propostos no Trabalho 2 da disciplina SME0806 - Estatística Computacional, oferecida pelo Instituto de Ciências Matemáticas e de Computação da Universidade de São Paulo no primeiro semestre de 2021. As temáticas abordadas são métodos computacionais de reamostragem para a obtenção de estimativas pontuais e intervalares.
+
+
+## Desenvolvimento e Metodologia
+
+## Exercício 1
+
+No presente exercício, quer-se analisar o coeficiente de Gini para o Produto Interno Bruto (PIB) _per capita_ dos municípios do estado de São Paulo. Para tal análise, foi considerado que os valores observados para tais municípios correspondiam à uma amostra de observações e em tal amostra performou-se um processo de reamostragem baseado em _bootstrap_ para obter-se estimativas pontuais e intervalares para o coeficiente de desigualdade. O sistema de referência utilizado foi o de uma pesquisa de PIB municipal realizada pelo Instituto Brasileiro de Geografia e Estatística - IBGE; Fundação Seade em 2018. A função para obter o coeficiente de Gini foi implementada em R e encontra-se abaixo.
+
+```{r}
+# Coeficiente de Gini
+Gini <- function(v){ # função recebe vetor de interesse v
+  mu <- mean(v) 
+  n <- length(v)
+  m_sub <- outer(v,v, FUN = '-')# obtém uma matriz com todas as subtrações 
+  #possíveis entre os termos de v (xi-xj); i,j = {1,2,...,n}
+  mod_m_sub <- abs(m_sub) # obtém a matriz com o módulo das subtrações 
+  somatorio <- sum(mod_m_sub) # obtém o somatório dos elementos de mod_m_sub
+  gini <- somatorio/(2*n^2*mu) # cálculo do coeficiente de Gini
+  return(gini)
+}
+```
+
+### Bootstrap iterado
+
+```{r}
+data <- read.csv("dadosIBGE_f.csv", 
+                 header = TRUE,
+                 encoding = "UTF-8") # dados dos municípios de SP, IBGE
+
+data <- data.frame(data)
+
+PIBpc <- data$PIBpc # valores para todos os municípios
+
+
+## Bootstrap iterado
+
+set.seed(2112)
+n <- length(PIBpc) # número de observações (municípios: 645)
+G <- Gini(PIBpc) # estimativa pontual do coef de Gini
+B1 <- 100 # Número de amostras bootstrap no primeiro nível
+B2 <-  10 # Número de amostras bootstrao no segundo nível
+t <- c() # vetor vazio para receber os valores de t* (boostrap)
+
+system.time({ # Obter tempo de compilação do segmento
+  # Nível 1 (N1)
+  ge1 <- c() #vetor para valores do Gini estimado para cada amostra boostrap(N1)
+  
+  for(b1 in 1:B1){
+    # Amostra bootstrap (nível 1)
+    ab1 <- sample(PIBpc, n, replace = TRUE)
+    # Estimativa bootstrap (*)
+    ge1[b1] <- Gini(ab1)
+    
+    # Nível 2 (N2)
+    ge2 <- c() #recebe valores do Gini estimado para cada amostra boostrap(N2) 
+    
+    for(b2 in 1:B2){
+      # Amostra bootstrap (nível 2)
+      ab2 <- sample(ab1, n, replace = TRUE)
+      # Estimativa bootstrap (**)
+      ge2[b2] <- Gini(ab2)
+    }
+    
+    t[b1] <- (ge1[b1] - G)/sd(ge2)
+  }
+})
+```
+
+### Obtenção de estimativas pontuais e intervalares
+
+```{r}
+# Estimativas pontuais
+epb <- sd(ge1) # erro padrão bootstrap
+gb_cvies <- 2 * G - mean(ge1)  # estimativa bootstrap com correção de viés
+gb_vies <- mean(ge1)
+
+```
+
+```{r, echo = FALSE}
+cat("Erro padrão bootstrap:", epb)
+cat("Estimativa direta:", G)
+cat("Estimativa Bootstrap (sem correção de viés):", gb_vies)
+cat("Estimativa Bootstrap (com correção de viés):", gb_cvies)
+```
+
+
+```{r}
+# Estimativas intervalares
+conf <- .95 # nível de confiança de 95%
+coefq <- c(1-conf,1+conf)/2 # coeficientes de probabilidade dos quantis 
+cat("Intervalo percentil: IC[G,",100*conf,"%] = [",
+    quantile(ge1, probs = coefq, type = 6),"]" )
+
+qs12 <- quantile(t, probs = coefq, type = 6) # quantis da distribuição de t*
+ictb <- G - qs12[2:1]*epb # intervalo de confiança usando q12
+cat("Intervalo t* (t bootstrap): IC[G,",100*conf,"%] = [",ictb,"]" )
+```
+## Exercício 2
+
+```{r}
+cor(data[,c(2,3,4,5,6)])
+```
+
+
+```{r}
+x <- data$T_ex_adm_pub
+y <- data$Total
+
+set.seed(2112)
+n <- length(data$Municipios) # número de observações (municípios: 645)
+pearson <- cor(x,y)
+B1 <- 1000 # Número de amostras bootstrap no primeiro nível
+B2 <-  100 # Número de amostras bootstrao no segundo nível
+t <- c() # vetor vazio para receber os valores de t* (boostrap)
+
+system.time({ # Obter tempo de compilação do segmento
+  # Nível 1 (N1)
+  pe1 <- c() #vetor para valores da cor estimada para cada amostra boostrap(N1)
+  
+  for(b1 in 1:B1){
+    # Amostra bootstrap dos indices (nível 1)
+    indic1 <- sample(n, n, replace = TRUE)
+    # Estimativa bootstrap (*)
+    pe1[b1] <- cor(x[indic1],y[indic1])
+    
+    # Nível 2 (N2)
+    pe2 <- c() #recebe valores da cor estimada para cada amostra boostrap(N2) 
+    
+    for(b2 in 1:B2){
+      # Amostra bootstrap dos índices (nível 2)
+      indic2 <- sample(indic1, n, replace = TRUE)
+      # Estimativa bootstrap (**)
+      pe2[b2] <- cor(x[indic2],y[indic2])
+    }
+    
+    t[b1] <- (pe1[b1] - pearson)/sd(pe2)
+  }
+})
+
+```
+
+```{r}
+# Estimativas pontuais
+epb <- sd(pe1) # erro padrão bootstrap
+pb_vies <- mean(pe1)
+```
+
+```{r, echo=FALSE}
+cat("Erro padrão bootstrap:", epb)
+cat("Estimativa direta:", pearson)
+cat("Estimativa Bootstrap (sem correção de viés):", pb_vies)
+```
+
+```{r}
+
+# Estimativas intervalares
+conf <- .95 # nível de confiança de 95%
+coefq <- c(1-conf,1+conf)/2 # coeficientes de probabilidade dos quantis 
+cat("Intervalo percentil: IC[pearson,",100*conf,"%] = [",
+    quantile(pe1, probs = coefq, type = 6),"]" )
+
+qs12 <- quantile(t, probs = coefq, type = 6) # quantis da distribuição de t*
+ictb <- pearson - qs12[2:1]*epb # intervalo de confiança usando qs12
+cat("Intervalo t* (t bootstrap): IC[pearson,",100*conf,"%] = [",ictb,"]" )
+```

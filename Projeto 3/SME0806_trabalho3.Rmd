@@ -1,0 +1,402 @@
+---
+title: "SME0806 - Estatística Computacional - Trabalho 3"
+author:
+date: "04/07/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Alunos:
+
+- Aline Fernanda da Conceição, 9437275
+- Diego J. Talarico Ferreira, 3166561
+- Matheus Victal Cerqueira, 10276661
+- Murilo Henrique Soave, 10688813
+- Nelson Calsolari Neto, 10277022
+
+
+## Docente: Professor Dr. Mário de Castro
+
+## Introdução
+
+O presente documento se trata de uma solução para os exercícios propostos no Trabalho 3 da disciplina SME0806 - Estatística Computacional, oferecida pelo Instituto de Ciências Matemáticas e de Computação da Universidade de São Paulo no primeiro semestre de 2021. As temáticas abordadas são métodos computacionais para a obtenção do nível descritivo de determinados testes de hipóteses e métodos MCMC para geração de amostras aleatórias.
+
+
+## Desenvolvimento e Metodologia
+
+
+
+## Exercício 1
+
+No primeiro exercício, tem-se o objetivo de implementar um gerador de amostras aleatórias para o vetor aleatório $\pmb{X} = (X_1,X_2)'$, cuja função densidade é dada por:
+
+\begin{center}
+\[f(x_1,x_2) \propto x_2^{65}exp\left\{ \frac{-x_2}{2}\sum_{i=1}^{130}(y_i-x_1)^2\right\}exp\left\{-\frac{(x_1-50)^2}{200}\right\}x_2^{-0,999}exp\left\{-0,001x_2\right\}\]
+\end{center}
+
+se $x_1\in\mathbb{R}$ e $x_2>0$ e $f(x_1,x_2)=0$ caso contrário. Os valores de $y_i$, $i = 1,2,\cdots,130$ são conhecidos e dados pelo exercício.
+
+A partir de desenvolvimento matemático em $f(x_1,x_2)$, podemos mostrar que as distribuições condicionais completas de $X_1$ e $X_2$ são dadas por:
+
+\begin{center}
+
+\[X_1|X_2=x_2 \sim N\left(\mu = \frac{1/2+x_2\sum_{i=1}^{130}y_i}{130x_2+1/100},\sigma^2 = \frac{1}{130x_2+1/100}\right)\] \\
+
+\[X_2|X_1 = x_1 \sim Gamma\left(k = 65,001;\theta=\left(0,001+\frac{\sum_{i=1}^{130}(y_i-x_1)^2}{2}\right)^{-1}\right)\] 
+
+\end{center}
+
+**Observação:** O desenvolvimento para a obtenção das relações acima, bem como o núcleo obtido para as distribuições $X_1|X_2=x_2$ e $X_2|X_1=x_1$ que permitiram tais conclusões, podem ser encontrados na **Seção 1** do apêndice desse trabalho. 
+
+Assim sendo, como conhecemos as distribuições condicionais completas de $X_1$ e $X_2$, e é possível obter amostras pseudoaleatórias de tais distribuições utilizando-se de ferramentas computacionais na linguagem R, optamos pela implementação de um amostrador de Gibbs, o qual é de mais simples implementação que o algoritmo Metropolis-Hastings, além de não ser baseado em um método de aceitação-rejeião, o que permite que aproveitemos mais iterações.
+
+Primeiramente, implementamos funções para o cálculo dos parâmetros das distribuições condicionais completas. Os 130 valores conhecidos do vetor $y$ encontram-se na **Seção 2** do apêndice desse trabalho. Toda vez que a variável "y" for apresentada no código desenvolvido para este exercício, estará fazendo menção ao vetor de valores apresentados no apêndice. Seguem abaixo as funções para os parâmetros.
+
+```{r, echo=FALSE}
+rm(list=ls(all=TRUE))
+
+library(ggplot2)
+
+#1-) Amostrador de Gibbs
+
+
+
+y <- c(98.77, 97.12, 97.34, 98.66, 99.66, 97.22, 98.04, 97.30, 97.15, 98.80,
+       98.53, 97.96, 98.05, 97.14, 97.53, 97.50, 98.32, 97.24, 97.70, 98.13,
+       99.97, 99.01, 97.54, 98.66, 97.78, 99.34, 98.74, 97.36, 97.66, 97.70,
+       97.98, 97.96, 97.26, 99.32, 98.32, 97.29, 98.41, 96.60, 97.37, 98.14,
+       97.47, 98.54, 97.25, 97.54, 98.56, 96.89, 97.94, 98.39, 99.80, 99.00, 
+       99.06, 97.17, 98.35, 98.40, 97.64, 99.34, 99.90, 96.36, 97.60, 98.33,
+       99.46, 97.22, 96.76, 98.66, 98.91, 96.94, 97.19, 98.28, 99.33, 96.98,
+       98.36, 98.40, 99.76, 99.34, 98.90, 99.23, 97.78, 99.69, 97.45, 96.94,
+       99.20, 98.59, 99.60, 98.32, 98.32, 98.50, 98.83, 97.04, 98.91, 97.24, 
+       99.06, 97.79, 98.68, 97.63, 97.53, 98.60, 99.35, 98.95, 98.06, 99.65,
+       96.96, 99.15, 97.94, 97.07, 99.13, 97.92, 97.76, 99.21, 98.91, 98.45, 
+       99.25, 98.93, 96.03, 98.52, 99.16, 97.64, 98.21, 99.46, 97.42, 99.31,
+       98.00, 97.75, 97.99, 99.15, 96.93, 96.79, 98.44, 99.20, 99.31, 97.73)
+
+
+```
+
+```{r}
+# soma dos valores de y
+s <- sum(y)
+
+# Parâmetros de X1|X2=x2 ~ N(mu,sigma2)
+mu <- function(x2){
+  return( (1/2+x2*s)/(130*x2+1/100) ) # obtenção da média mu
+}
+
+sigma2 <- function(x2){
+  return( 1/(130*x2+1/100) ) # obtenção da variância sigma2
+}
+
+
+# Parâmetros de X2|X1=x1 ~ Gamma(k,theta)
+k = 65.001 # o parâmetro de forma k é um valor constante 
+
+theta <- function(x1){
+  return( 1 / ( 0.001 + sum((y-x1)^2)/2 ) ) # obtenção do parâmetro de escala
+}
+```
+
+Com as funções para os parâmetros em mãos, podemos fazer uma função que implemente o amostrador de Gibbs. A função que foi implementeda para o desenvolvimento desse trabalho encontra-se abaixo.
+
+```{r}
+# a função recebe o número de iterações desejada (iter), os valores iniciais 
+# para x1 e x2 (x1.inicial e x2.inicial, respectivamente) e a semente para 
+# possível reprodutibilidade
+amostrador <- function(iter, x1.inicial, x2.inicial, semente){
+  
+  set.seed(semente)
+  
+  x1 <- x2 <-c() # x1 e x2 são vetores vazios aqui inicializados para armazenar
+  # os valores obtidos nas amostras de x1 e x2 pelo método de Gibbs
+  
+  # atribuição dos valores iniciais 
+  x1[1] <- x1.inicial
+  x2[1] <- x2.inicial
+  
+  # Laço de aplicação do método de Gibbs
+  for(j in 1:iter) {
+    # Utilização das distribuições condicionais completas obtidas anteriormente
+    # e das funções para o cálculo dos parâmetros a cada iteração
+    x1[j+1] <-rnorm(1, mu(x2[j]), sqrt(sigma2(x2[j])) )
+    x2[j+1] <-rgamma(1, shape = k, scale = theta(x1[j+1]) )
+  
+    }
+  return(list(x1,x2)) # retorna uma lista contendo os valores dos dois vetores
+}
+```
+
+Para efeito de sucintez, não foram incluídos neste relatório todos os testes realizados em relação à sensibilidade da convergência à escolha dos valores iniciais. Mas tais testes foram feitos para diferentes valores iniciais e ocorreu convergência em torno dos mesmos pontos na reta real para valores iniciais da cadeia consideravemente distintos, além de serem obtidas medidas resumo muito próximas entre os casos estudados. Assim, aqui iremos utilizar da função _amostrador_ criada anteriormente para a obtenção de dois vetores (um de amostras de $X_1$ e outro de amostras de $X_2$) de tamanho 10000 (iterações), como mostra o código abaixo, e apresentaremos os resultados para as escolhas de valores iniciais $98$ para $x_1$ e $1$ para $x_2$.
+
+```{r}
+iter = 10000 # número de iterações
+
+# obtenção da lista com os vetores de amostras através da função amostradora
+# semente utilizada = 2112
+amostras <- amostrador(iter = iter, x1.inicial = 98, x2.inicial = 1, 
+                       semente = 2112)
+
+# Tansformação da estrutura de dados que contém os valores obrtidos de lista 
+# para vetor numérico.
+ax1 <- unlist(amostras[1], recursive = TRUE, use.names = TRUE)
+ax2 <- unlist(amostras[2], recursive = TRUE, use.names = TRUE)
+
+# remoção do valor inicial da cadeia, o qual é um chute
+ax1 <- ax1[-1]
+ax2 <- ax2[-1]
+```
+
+Tendo os vetores de amostras geradas para $X_1$ ( _ax1_ )e $X_2$ ( _ax2_ ) em mãos, foi realizado um estudo de convergência e de autocorrelação das cadeias, para melhor assegurarmos que as amostras geradas de fato são amostras aleatórias de $X_1$ e $X_2$. Abaixo temos gráficos para a evolução das cadeias geradas.
+
+```{r,fig.height = 3.2, fig.width = 7, fig.align = "center"}
+# Gráficos de evolução da cadeia
+par(mfrow =c(1, 1))
+plot(ax1, xlab = "Índice", ylab = "X1", type = "l")
+plot(ax2, xlab = "Índice", ylab = "X2", type = "l")
+```
+É notável pelos gráficos acima que não parece haver um padrão de evolução nas amostras geradas ao longo das iterações. O que é um bom indicador em relação à propreidade de aleatoriedade da amostraq que queremos atingir.
+
+Prosseguindo com a análise, obteve-se os gráficos para a evolução das médias ergódicas para avaliarmos a convergência da cadeia gerada. Aobservando-se o comportamento dos gráficos, foi proposto um _burn-in_ ("queima") dos primeiros 2000 valores da cadeia original. Como o foram geradas 10000 observações para cada uma das duas variáveis de interesse, ainda ficamos com uma grande quantidade de valores para analisarmos propriedades estatísticas posteriormente. Abaixo encontram-se os gráficos da e volução das médias ergódicas
+
+
+```{r,fig.height = 3.2, fig.width = 7, fig.align = "center"}
+#burn-in proposto
+descarte = 2000
+
+# Gráficos para as médias egódicas
+
+# Obs.: o R é uma linguagem matricial de alto nível, o que permite a obtenção 
+# dso valores das médias ergódicas pela simples sintaxe cumsum(ax1)/(1:iter) 
+
+plot(cumsum(ax1)/(1:iter), type = "l", xlab = "Indice",
+     ylab =expression(paste("Média ergódicas de ", X[1])))
+abline(v = descarte, lty = 2, col = "red")
+
+plot(cumsum(ax2)/(1:iter), type = "l", xlab = "Indice",
+     ylab =expression(paste("Média ergódicas de ", X[2])))
+abline(v = descarte, lty = 2, col = "red")
+```
+Como discutido, as médias ergódicas parecem se estabilizar em torno de um ponto na reta real a partir do valor 2000 para o índice. 
+
+Por fim, foi verificado a autocorrelação da cadeia para desafagens de 1 a 10 de forma a averiguar se era necessáio um processo de _thinning_. Abaixo encontram-se os gráficos de autocorrelação.
+
+```{r,fig.height = 3.2, fig.width = 7, fig.align = "center"}
+par(mfrow =c(1, 2))
+acf(ax1, lag.max = 10, xlab = "Defasagem", main = "",
+    ylab = "Autocor. de X1")
+acf(ax2, lag.max = 10, xlab = "Defasagem", main = "",
+    ylab = "Autocor. de X2")
+```
+
+Pelos gráficos de autocorrelação, pode-se concluir que a autocorrelação é extremamente pequena na cadeixa gerada, mantendo-se dentro dos intervalos de confiança propostos pela função _acf_ em torno de 0. Assim concluir-se que não é necessário desprender esforço computacional em um processo de _thinning_. Assim, apliquemos o _burn-in_ proposto para a obtenção de um vetor com as amostras dejesadas após confirmação dos tratamentos necessários pelas análises anteriores.
+
+```{r}
+# Obtenção das amostras de X1 e X2 após o tratamento sugerido
+
+# descarte proposto de 2000 e thinning não aplicado (step = 1)
+indices <- seq(descarte+1, iter)
+
+ax1.f <- ax1[indices]
+ax2.f <- ax2[indices]
+```
+
+Depois da obtenção das amostras aleatórias de $X_1$ e $X_2$ a partir de um amostrador de Gibbs e de um tratamento baseado na análise de convergência e autocorrelação da cadeia, podemos calcular estatísticas descritivas para analisarmos o comportameto de tais variáveis aleatórias.
+
+Abaixo apresentamos algumas estatísticas descritivas para as amostras finais obtidas.
+
+**Observação**: as medidas resumo abaixo apresentadas foram obtidas utilizando-se das funções _summary_ e _sd_ do R aplicados às amostras finais contindas nas variáveis _ax1.f_ e _ax2.f_. O código foi omitido para efeito de organização no relatório.
+
+Estatísticas resumo de $X_1$:
+```{r, echo = FALSE}
+summary(ax1.f)
+cat("Desvio-padrão:",sd(ax1.f))
+
+```
+
+Podemos concluir que $X_1$ possui um desvio-padrão pequeno, em torno de 0,077. Assim, os valores que ela assume se concentram em torno da média 98,210; valor que também corresponde à sua mediana para a precisão analisada.
+
+Estatísticas resumo de $X_2$:
+```{r, echo = FALSE}
+summary(ax2.f)
+cat("Desvio-padrão:", sd(ax2.f))
+```
+
+Já para $X_2$, o desvio-padrão é maior do que no caso de $X_1$, mas ainda é um valor pequeno, em torno de 0,162. Os valores que ela assume se encontram em em torno da média 1,289; a qual não corresponde ao valor da mediana com a mesma precisão do caso de $X_1$ mas ainda é próxima de seu valor de 1,281.
+
+## Exercício 2
+
+Sejam as variáveis aleatórias $T_1$: tempos de queima do tipo de combustível 1 e $T_2$: tempos de queima de do tipo de combustível 2 (em minutos). Abaixo, são apresentadas amostras observadas de $T_1$ e $T_2$.
+
+```{r}
+tempos1 <- c(63, 82, 81, 68, 57, 59, 66, 75, 82, 73)
+
+tempos2 <- c(64, 56, 72, 63, 83, 74, 59, 82, 65, 82)
+```
+
+O objetivo é realizar um teste de hipóteses que permita que sejam obtidas conclusões acerca da igualdade (ou desigualdade) das variâncias populacionais de $T_1$ e $T_2$, utilizando-se de métodos puramente computacionais. Para tal, foi utilizada da teoria de testes de permutação bilateral, que permite testar as hipóteses:
+
+\begin{center}
+$H_0: F_1 = F_2 \ \ \ \ \ \text{vs}\ \ \ \ \  H_1:F_1\neq F_2$
+\end{center}
+
+Sendo $F_1$ e $F_2$ as funções de distribuição de $T_1$ e $T_2$ respectivamente. Assim sendo, primeiramente façamos uma análise qualitativa da  diferençça entre as médias de $T_1$ e $T_2$.
+
+```{r}
+
+# Gráficos de distribuição acumulada empírica
+dados <- c(tempos1,tempos2)
+
+plot(ecdf(tempos1), main = "", pch = 20, col = "darkslategrey",
+     xlab = "Tempos observados",
+     ylab = "Distribuição empírica",
+     xlim = range(dados))
+lines(ecdf(tempos2), pch = 20, col = "cyan")
+rug(tempos1, col = "darkslategrey", lwd = 2)
+rug(tempos2, col = "cyan", lwd = 2, side = 3)
+legend("topleft",c("Tipo 1", "Tipo 2"), lty = 1, 
+       col =c("darkslategrey", "cyan"),
+       bty = "n")
+
+```
+
+```{r}
+# Médias para os tempos observados
+mean(tempos1)
+mean(tempos2)
+```
+Observando-se os resultados do gráfico das distribuições empíricas de $T_1$ e $T_2$ criadas a partir das amostras, pode-se dizer que as médias são consideravelmentne próximas, o que permite que possamos utilizar o nível discritivo obtido no teste de permutação com mais segurança para concluir sobre a igualdade das variâncias, já que o teste de permutação compara as funções de distribuição e não as variâncias diretamente.
+
+Para realizar o teste de permutações, utilizou-se a estatística de teste
+
+\begin{center}
+\[ F = \frac{S_1^2}{S_2^2}\ \ \ (I)\]
+\end{center}
+
+onde
+
+\begin{center}
+\[S_k^2 = \frac{\sum_{i=1}^{n_i}(y_i-\bar{t_k})}{n_k-1}\]
+\end{center}
+
+Onde $n_k$ é o tamanho da amostra de obtida de $T_k$ e $\bar{t_k}$ a média amostral de tais tempos, para $k \in \{1,2\}$. Assim, foram obtidas as informações necessárias para realizar um teste de permutações utilizando-se da estatística de teste (I).
+
+```{r}
+# Teste de permutação:
+
+## Estatística de teste: s2_1/s2_2;
+## Aplicar um teste de permutação (não há suposições sobre a distribuição 
+## original);
+## Muitas permutações são possíveis: abordagem por método de Monte Carlo.
+
+# tamanhos das amostras
+n1 <- length(tempos1)
+n2 <- length(tempos2)
+
+# soma das amostras para realziar a permutação
+n <- n1 + n2
+
+dados <- c(tempos1,tempos2)
+
+choose(n, n1) # permutações possíveis
+
+F_obs <- var(tempos1)/var(tempos2) # estatpística de teste observada
+F_obs
+
+```
+Assim sendo, são possíveis 184756 permutações diferentes com as amostras fornecidas. para poupar esforço computacional, foram obtids resultados por simulações de Monte Carlo com 35000 permutações, obtendo-se assim ao final, uma aproximação para o p-valor e não o seu valor condicional exato. A estatística observada $F_{obs}=0,883$ será utilizada para a obtenção do p-valor. Como o teste aqui realziado é bilateral, precisamos de dois pontos na reta o qual iremos utilizar como indicativo de observações extremas. São eles: $F_{obs}$ e $1/F_{obs}$, os quais utilizaremos para o cáculo do p-valor. Assim sendo, observamos os valores obtidos para a estatística (I) para as diferentes permutações obtidas pelo método de Monte Carlo. 
+
+```{r}
+
+R <- 35000 # Número de simulações
+F. <-c() # vetor para armazenar os valores da estatística (I)
+
+set.seed(2112)
+
+for(j in 1:R) {
+  dadosl <- sample(dados) # permutação
+  t1l <- dadosl[1:n1] # atribui os n1 primeiros como observações de 1
+  t2l <- dadosl[(n1+1):n] # atribui o restante como observações de 2
+  F.[j] <- var(t1l)/var(t2l) # obtém a estatística para a permutação
+}
+
+```
+
+Agora, vejamos o comportamento da estatística de teste nas permutações.
+
+```{r}
+# gráfico das frequências relativas dos valores assumidos por (I)
+plot(table(F.)/R, col = "gray50", 
+     xlab = "Razão entre variâncias amostrais",
+     ylab = "Frequência relativa")
+# pontos indicativos de observações extremas (estatística observada e seu 
+# inverso)
+points(F_obs, 0, pch = 19, col = "firebrick3")
+points(1/F_obs, 0, pch = 19, col = "firebrick3")
+box()
+
+```
+
+Observando-se o gráfico acima e a localização dos pontos da estatística observada para definir observações extremas, pode-se criar suspeitas fortes de que o nível descritivo para o teste será alto. Obtenhamos assim o p-valor com a teoria para testes de.
+
+**Observação**: sabe-se que para este caso $F_{obs}=0,883 < 1/F_{obs}$. Assim, as observações extremas estarão à direita de $1/F_{obs}$ e à esquerda de $F_{obs}$.
+
+
+```{r}
+# observações extremas à esquerda de F_obs
+ke <- sum(F. <= F_obs)
+# observações extremas à direita de 1/F_obs
+kd <- sum(F. >= 1/F_obs)
+
+# p-valores bilaterais
+p1 <- (ke+1)/(R+1)
+p2 <- (kd+1)/(R+1)
+
+cat("\n nível descritivo para teste unilateral à esquerda aprox. =", (ke+1)/(R+1), "\n")
+cat("\n nível descritivo para teste unilateral à direita aprox. =", (kd+1)/(R+1), "\n")
+
+#nível descritivo é igual a duas vezes o menor p-valor dos testes bilaterais 
+p <- 2*min(p1,p2)
+
+cat("\n nível descritivo aprox. para o teste de permutações bilateral=", p, "\n")
+```
+Assim sendo, o nível discritivo obtido pelo teste de permutação bilateral obtido foi de $\alpha = 0,736$, o que mostra que há fortes indícios de que a hipótese nula do teste de permutação (ou seja, de que as distribuições $F_1$ e $F_2$ são iguais). Este resultado somado à análise descritiva sobre a média nos permite concluri com considerável segurança de que as variâncias dos dois grupos podem ser consideradas iguais.
+
+
+
+\newpage
+## Apêndice
+
+### Seção 1
+
+
+\[exp\left\{\frac{1}{2}\cdot \frac{\left[x_1^2-2\left(\frac{1}{130x_2+1/100}\right)\cdot\left(\frac{1}{2}+x_2s\right)x_1\right]}{\frac{1}{130x_2+1/100}}\right\}\]
+
+### Seção 2
+
+Aqui temos os valores de $y$ os quais foram apresentados no execício proposto. Assim, toda vez que a variável "y" for apresentada nos códigos, estará se referindo ao vetor abaixo.
+
+```{r}
+y <- c(98.77, 97.12, 97.34, 98.66, 99.66, 97.22, 98.04, 97.30, 97.15, 98.80,
+       98.53, 97.96, 98.05, 97.14, 97.53, 97.50, 98.32, 97.24, 97.70, 98.13,
+       99.97, 99.01, 97.54, 98.66, 97.78, 99.34, 98.74, 97.36, 97.66, 97.70,
+       97.98, 97.96, 97.26, 99.32, 98.32, 97.29, 98.41, 96.60, 97.37, 98.14,
+       97.47, 98.54, 97.25, 97.54, 98.56, 96.89, 97.94, 98.39, 99.80, 99.00, 
+       99.06, 97.17, 98.35, 98.40, 97.64, 99.34, 99.90, 96.36, 97.60, 98.33,
+       99.46, 97.22, 96.76, 98.66, 98.91, 96.94, 97.19, 98.28, 99.33, 96.98,
+       98.36, 98.40, 99.76, 99.34, 98.90, 99.23, 97.78, 99.69, 97.45, 96.94,
+       99.20, 98.59, 99.60, 98.32, 98.32, 98.50, 98.83, 97.04, 98.91, 97.24, 
+       99.06, 97.79, 98.68, 97.63, 97.53, 98.60, 99.35, 98.95, 98.06, 99.65,
+       96.96, 99.15, 97.94, 97.07, 99.13, 97.92, 97.76, 99.21, 98.91, 98.45, 
+       99.25, 98.93, 96.03, 98.52, 99.16, 97.64, 98.21, 99.46, 97.42, 99.31,
+       98.00, 97.75, 97.99, 99.15, 96.93, 96.79, 98.44, 99.20, 99.31, 97.73)
+```
+
+
+
+

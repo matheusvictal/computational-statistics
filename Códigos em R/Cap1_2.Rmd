@@ -1,0 +1,74 @@
+---
+title: "Geração de números aleatórios"
+author: "Matheus Victal Cerqueira"
+date: "15/05/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Números pseudoaleatórios
+
+Um processo pseudoaleatório se trata de um processo que parece ser aleatório mas na realidade é determinístico. Sequências pseudoaleatórias em geral apresentam _aleatoriedade estatística_, quando na realidade, o processo que as gerou é inteiramente determinístico. Tais números são de mais fácil geração do que números genuinamente aleatórios e também possuem a vantagem de poderem ser repetidos para inspeção de software a partir de uma _seed_.
+
+## Geração de amostras aleatórias
+
+A geração de amostras aleatórias de uma população com uma distribuição de interesse por vias computacionais é de grande interesse para simulações computacionais. Por exemplo, podemos querer gerar um grafo vuja distribuição de grau respeite um modelo exponencial, ou um modelo normal, dependendo da aplicação. Extretamente importante em simulações estocásticas, poder gerar amostras de uma população alvo aumenta muito a possibilidade de investigação estatística de forma empírica. Quando soluções analíticas são de difícil obtenção para o problema em qeustão, a geração de amostras aleatórias é uma ferramente poderosa na compreensão de mecan ismos probabilísticos em problemas reais.
+
+Entre os métodos de geração de amostras aleatórias mais utilizados, tem-se o _método da inversão_ e o _método da rejeição_, os quais serão tratados aqui com mais detalhes.
+
+### Método da Inversão (ou Método da Transformação):
+
+O método da inversão consiste na utilização da função de densidade acumulada (f.d.a.) da variável aleatória de interesse para a obtenção de uma amostra aleatória. Primeiramente, a f.d.a. $F(x)$ da variável aleatória alvo tem de ser conhecida e a obtenção de sua função inversa generalizada deve ser possível. A função inversa generalizada de $F(x)$ é dada por:
+
+\begin{center}
+$F^-(x) = inf\{t\in\mathbb{R}: F(t)\geq x\}$, para $x\in[0,1]$
+\end{center}
+
+Obs.: $F(x)$ contínua e estritamente crescente $\Rightarrow F^-(x)=F^{-1}(x), \forall x \in [0,1]$
+
+Com os conceitos acima, pode-se gerar amostras aleatórias de uma variável aleatória de interesse $X$ a partir do seguinte resultado:
+
+
+**Resultado:** Se $U_1,\cdots,U_n$ é uma a.a. da distro. $U(0,1)$, então $X_1=F^-(u_1),\cdots,X_1=F^-(u_n)$ é uma a.a. da v.a. $X$ cuja f.d.a. é $F(x)$.
+
+Dessa forma, é possível gerar a.a. de qualquer distribuição com $F^-(x)$ obtível e conhecida utilizando-se de um gerador de amostras aleatórias de uma dsitribuição uniforme implementado. A esse procedimento, dá-se o nome de método da inversão.
+
+### Método da Rejeição
+
+O método da aceitação-rejeição foi proposto por von Neumann em 1951 e é extretamente utilizado no contexto de aplicações simulacionais até hoje. Muitas vezes, o método da inversão não é aplicável pelo simples fato de não conhecermos $F^-(x)$ para a variável aleatória de interesse, ou ela não ser obtível. Digamos que o objetivo seja obter uma a.a. de uma variável aleatória $X$ com distribuição $f(x)$ a qual se enquadre na situação descrita, o método da rejeição tem seu conceito base na obtenção de uma função de distribuição $g(y)$ de uma v.a. $Y$ que respeite o seguintes critério:
+
+\begin{itemize}
+\item $f(x)\leq Mg(x), \forall x$ no domínio de $f$ e $g$ (repare que tais funções devem ter o mesmo domínio) em que $1<M<\infty$.
+\end{itemize}
+
+Assim, dizemos que $Mg(x)$ envelopa $f(x)$. O algoritmo para o método da rejeição segue os seguintes passos:
+
+\begin{enumerate}
+
+\item Gerar uma observação $y$ de $Y$;
+
+\item Gerar uma observação $u$ de $U(0,1)$;
+
+\item Se $u\leq\frac{f(x)}{Mg(x)}$, $y$ é tomada como uma observação $x$ da v.a. $X$, c.c., rejeita-se $y$ e retorna-se ao passo $1$;
+
+\item Repetir os passos de $1$ a $4$ até a obtenção de $n$ observações de $x$, que irão compor a amostra aleatória de $X$.
+
+\end{enumerate}
+
+Recomenda-se tomar $M = max\frac{f(x)}{g(x)}$, para algum $x$. Qualquer outro $M'>M$ poderia se utilizado.
+
+**Propriedade:** O número de tentativas até obter um valor da distribuição de $X$ tem distribuição geométrica com média igual a M. A probabilidade $p$ de aceitação é $1/M$.
+
+O método baseia-se na propriedade de que a distribuição da variável $Y$, condicionada no evento de aceiação descrito no algoritmo, coincide com a distribuição de $X$.
+
+Abaixo tem-se um exemplo em R para a geração de uma amostra pseudoaleatória de uma distribuição normal $X\sim N(0,1)$ utilizando-se do método da aceitação-rejeição.
+
+```{r}
+
+
+```
